@@ -112,7 +112,7 @@ def fetch_real_picture_base64(genre, turn=1, seed=None, exclude_index=None):
         candidate_indices = all_indices
 
     # Pick deterministically from candidates using seed (avoids same-modulo collisions)
-    if seed is not None and isinstance(seed, int):
+    if seed is not None and isinstance(seed, int) and exclude_index is not None:
         chosen_idx = candidate_indices[seed % len(candidate_indices)]
     else:
         chosen_idx = candidate_indices[(turn - 1) % len(candidate_indices)]
@@ -151,13 +151,13 @@ def generate_scene_image(scene_text, genre, world, turn=1, seed=None, is_regener
     start_time = time.perf_counter()
     clean_genre = str(genre or "Fantasy").strip()
     clean_scene = re.sub(r'[^a-zA-Z0-9 ]+', ' ', html.unescape(str(scene_text or "")))
-    clean_scene = re.sub(r'\s+', ' ', clean_scene).strip()[:70]
+    clean_scene = re.sub(r'\s+', ' ', clean_scene).strip()[:300]
 
     if seed is None:
         if is_regeneration:
             seed = random.randint(10000, 999999)
         else:
-            seed = (abs(hash(f"{turn}_{clean_scene[:15]}")) % 9999) + 1
+            seed = (abs(hash(f"{turn}_{clean_scene}")) % 999999) + 1
 
     pollinations_status = "FAILED"
     fallback_status = "NOT USED"
