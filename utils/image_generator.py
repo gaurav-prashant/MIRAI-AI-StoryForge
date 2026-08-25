@@ -473,7 +473,7 @@ def generate_scene_image(scene_text, genre="Fantasy", world="", is_regeneration=
 
             pollin_url = f"https://image.pollinations.ai/prompt/{encoded}?width=896&height=504&seed={current_seed}&nologo=true&cache=false&model=turbo"
             
-            req_timeout = 1.0 if attempt == 0 else 1.0
+            req_timeout = 0.8 if attempt == 0 else 0.8
             stage_http_start = time.perf_counter()
             try:
                 req = urllib.request.Request(
