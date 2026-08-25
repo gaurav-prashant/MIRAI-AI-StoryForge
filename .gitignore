@@ -27,3 +27,15 @@ ENV/
 # OS files
 .DS_Store
 Thumbs.db
+
+# Debug / Temporary Logs & Test Files
+debug_*.txt
+debug_*.jpg
+debug_*.png
+test_*.jpg
+test_*.png
+turn*_trace_img.jpg
+trace_turns.py
+scrape.py
+results.txt
+how --stat --oneline HEAD

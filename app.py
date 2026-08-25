@@ -61,6 +61,10 @@ def export_adventure_json():
         "gold": st.session_state.get("gold", 50),
         "inventory": st.session_state.get("inventory", []),
         "clues": st.session_state.get("clues", []),
+        "adventure_id": st.session_state.get("adventure_id", ""),
+        "used_image_hashes": list(st.session_state.get("used_image_hashes", set())),
+        "used_image_signatures": list(st.session_state.get("used_image_signatures", set())),
+        "used_fallback_files": st.session_state.get("used_fallback_files", {}),
     }
     return json.dumps(save_data, indent=2, ensure_ascii=False)
 
@@ -112,6 +116,13 @@ def load_adventure_json(file_content):
         st.session_state["gold"] = int(data.get("gold", 50))
         st.session_state["inventory"] = [clean_html_tags(i) for i in data.get("inventory", []) if clean_html_tags(i)]
         st.session_state["clues"] = [clean_html_tags(c) for c in data.get("clues", []) if clean_html_tags(c)]
+        
+        # Restore Uniqueness Trackers
+        import uuid
+        st.session_state["adventure_id"] = data.get("adventure_id", uuid.uuid4().hex)
+        st.session_state["used_image_hashes"] = set(data.get("used_image_hashes", []))
+        st.session_state["used_image_signatures"] = set(data.get("used_image_signatures", []))
+        st.session_state["used_fallback_files"] = data.get("used_fallback_files", {})
 
         return True, f"Adventure loaded! Character: {st.session_state['player_name']} (Turn {st.session_state['turn']})"
 
@@ -975,12 +986,17 @@ def start_adventure(
     clue = str(result.get("clue", "") or "").strip()
 
     # Session metadata (not RPG stats — these are safe to set here)
+    import uuid
     st.session_state.game_started = True
     st.session_state.player_name = player_name.strip()
     st.session_state.genre = genre
     st.session_state.world = world.strip()
     st.session_state.turn = 1
     st.session_state.last_action = ""
+    st.session_state.adventure_id = uuid.uuid4().hex
+    st.session_state.used_image_hashes = set()
+    st.session_state.used_image_signatures = set()
+    st.session_state.used_fallback_files = {}
 
     # Sound Effect for new adventure start
 
@@ -1843,11 +1859,80 @@ if st.session_state.game_started:
                     st.info(f"🎮 **You chose:** {clean_action_text}")
 
                 if item.get("image_url"):
-                    st.image(
-                        item["image_url"],
-                        caption=f"🎨 Turn {item['turn']} — Scene Illustration",
-                        use_container_width=True,
-                    )
+                    import hashlib, base64, io as _io
+                    from PIL import Image as _PILImage
+                    h_md5 = "N/A"
+                    h_sha = "N/A"
+                    url = str(item["image_url"])
+                    src = "POLLINATIONS" if "pollinations" in url else "FALLBACK"
+                    img_raw = None
+                    img_fmt = "N/A"
+                    try:
+                        if url.startswith("data:"):
+                            base64_data = url.split(",", 1)[1]
+                            img_raw = base64.b64decode(base64_data)
+                            h_md5 = hashlib.md5(img_raw).hexdigest()
+                            h_sha = hashlib.sha256(img_raw).hexdigest()
+                            # Detect actual format from magic bytes
+                            if img_raw[:8] == bytes.fromhex("89504e470d0a1a0a"):
+                                img_fmt = "PNG"
+                            elif img_raw[:2] == bytes.fromhex("ffd8"):
+                                img_fmt = "JPEG"
+                            else:
+                                img_fmt = "UNKNOWN"
+                    except Exception as _de: pass
+                    adv_id = st.session_state.get("adventure_id", "adv_unknown")
+                    render_key = f"{adv_id}_turn{item['turn']}_{h_sha}"
+
+                    print("\n========================================")
+                    print("DISPLAYING IMAGE")
+                    print(f"TURN            = {item['turn']}")
+                    print(f"IMAGE TYPE      = {src}")
+                    print(f"IMAGE FORMAT    = {img_fmt}")
+                    print(f"IMAGE LENGTH    = {len(img_raw) if img_raw else 0} bytes")
+                    print(f"DATA URI PREFIX = {url[:30]}...")
+                    print(f"DECODED BYTES   = {len(img_raw) if img_raw else 0}")
+                    print(f"MD5             = {h_md5}")
+                    print(f"SHA256          = {h_sha}")
+                    print(f"IMAGE KEY       = story_history[{item['turn']}]")
+                    print(f"RENDER KEY      = {render_key}")
+                    rendered = "NO"
+
+                    if src == "FALLBACK" or url.startswith("data:"):
+                        try:
+                            if img_raw:
+                                pil_img = _PILImage.open(_io.BytesIO(img_raw))
+                                pil_img.load()
+                                print("FALLBACK PIL OPEN = SUCCESS")
+                                print(f"FALLBACK IMAGE SIZE = {pil_img.size}")
+                                st.image(
+                                    pil_img,
+                                    caption=f"🎨 Turn {item['turn']} — Scene Illustration",
+                                    width="stretch",
+                                )
+                                print("FALLBACK RENDER = YES")
+                                rendered = "YES (PIL)"
+                        except Exception as p_err:
+                            print(f"FALLBACK PIL ERROR = {p_err}")
+                            if img_raw:
+                                st.image(
+                                    img_raw,
+                                    caption=f"🎨 Turn {item['turn']} — Scene Illustration",
+                                    width="stretch",
+                                )
+                                rendered = "YES (raw bytes)"
+                    else:
+                        # Direct HTTP URL (Pollinations URL)
+                        st.image(
+                            url,
+                            caption=f"🎨 Turn {item['turn']} — Scene Illustration",
+                            width="stretch",
+                        )
+                        rendered = "YES (URL)"
+
+                    print(f"RENDERED        = {rendered}")
+                    print("========================================\n")
+
                     img_bytes = get_image_bytes(item["image_url"])
                     if img_bytes:
                         char_name = st.session_state.player_name.lower().replace(" ", "_") if st.session_state.get("player_name") else "hero"
